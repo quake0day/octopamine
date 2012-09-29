@@ -4,12 +4,16 @@
 # make debug: output debug version execution file
 CC = gcc
 CFLAGS = -O -Wall -ansi
-myhttpd: main.o
-	$(CC) -o myhttpd main.o 
+DEBUG = -DDEBUG
+myhttpd: main.o logging.o
+	$(CC) -o myhttpd main.o logging.o
 
 main.o:  main.c
 	$(CC) -c main.c 
 
+logging.o: logging.c
+	$(CC) -c logging.c
+
 # For the debug mode
 debug:
-	$(CC) main.c -o myhttpd -DDEBUG
+	$(CC) main.c logging.c -o myhttpd -DDEBUG

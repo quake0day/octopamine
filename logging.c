@@ -54,8 +54,3 @@ void logging()
 	 }
 }
 
-int main()
-{
-	logging();
-	return 0;
-}

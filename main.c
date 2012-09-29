@@ -1,3 +1,9 @@
+#include <limits.h>
+#include <inttypes.h>
+#include <stdarg.h>
+#include <time.h>
+#include <sys/types.h>
+#include "main.h"
 /*
  * A minimal web server (version 1.0 alpha)
  * Si Chen
@@ -91,6 +97,7 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    logging();
     return 0; // the end... die!!!!!!!!
 
 }
