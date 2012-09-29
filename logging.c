@@ -1,11 +1,10 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
+
 //#include<time.h>
+#include "main.h"
 
 void logging()
 {
-     int DEBUG_MODE = 1; // default DEBUG mode: off
+//     int DEBUG_MODE = 1; // default DEBUG mode: off
 //     time_t _t;
 //    time(&_t);
      char *a=NULL;
