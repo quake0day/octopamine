@@ -13,7 +13,7 @@
 int DEBUG_MODE = 0; // DEBUG mode: off
 int LOGGING = 0; // LOGGING mode : off
 int HELP = 0; // HELP mode : off
-int PORT = 8080; // httpd listening port, default is 8080
+int PORT = 8082; // httpd listening port, default is 8080
 int TIME = 60; // queuing time(s), default is 60(s)
 int THREADNUM = 4; // Number of threads in thread pool
 int SCHED = 0; // scheduling policy FCFS=0 SJF=1, default is FCFS
@@ -22,7 +22,7 @@ void process_request(char *rq, int fd);
 int request_arg_judge(char *f);
 int request_file_type(char *f);
 void provide_header(int file_type,int fd);
-
+char show_date();
 int main(int argc, char **argv)
 {
 	struct sockaddr_in sockaddr; /* incoming address */
@@ -115,7 +115,7 @@ int main(int argc, char **argv)
 	
 	
 	//NEED CHANGE !!
-	sockaddr.sin_port = htons(8081); /* socket port */
+	sockaddr.sin_port = htons(PORT); /* socket port */
 	
 	sockaddr.sin_family = AF_INET; /* addr family */
 	if ( bind(socket_id,(struct sockaddr *) &sockaddr, sizeof(sockaddr)) != 0 ) // bind socket to cetrain addr
@@ -259,12 +259,15 @@ show_404(char *arg, int fd)
 void provide_header(int file_type,int fd)
 {
 	FILE *fp = fdopen(fd,"w");
+	char *timebuf = NULL;
 	/*
 #ifdef DEBUG			
 			printf("I'm in provide_header\n");
 			printf("This file type is %d\n",file_type);
 #endif		*/
 	fprintf(fp,"HTTP/1.0 200 OK\r\n");
+	*timebuf = show_date();
+	fprintf(fp,"Date:%s",timebuf);
 	/* If it is a html file */
 	if(file_type == 0){
 		fprintf(fp,"Content-type:text/html");	
@@ -280,3 +283,15 @@ show_dir(char *dir, int fd)
 	
 }
 
+char show_date()
+{
+ 	char timebuf[100];
+	/* Obtain current time as seconds elapsed since the Epoch. */
+	time_t t;
+	time(&t);
+    /* Convert to 
+	Sun, 06 Nov 1994 08:49:37 GMT    ; 
+	RFC 822, updated by RFC 1123 */
+	strftime(timebuf,sizeof(timebuf),"%a, %d %b %Y %H:%M:%S GMT",gmtime(&t));
+	return *timebuf;
+}

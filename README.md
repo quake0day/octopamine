@@ -1,4 +1,5 @@
 # octopamine
+![Mou icon](http://www.trc-canada.com/Structures/O239750.png)
 
 ## Overview
 **octopamine**, A simple http server.
