@@ -13,9 +13,9 @@
 int DEBUG_MODE = 0; // DEBUG mode: off
 int LOGGING = 0; // LOGGING mode : off
 int HELP = 0; // HELP mode : off
-int PORT = 8080; // httpd listening port, default is 8080
+int PORT = 8081; // httpd listening port, default is 8080
 int TIME = 60; // queuing time(s), default is 60(s)
-int THREADNUM = 4; // Number of threads in thread pool
+int THREADNUM = 5; // Number of threads in thread pool
 int SCHED = 0; // scheduling policy FCFS=0 SJF=1, default is FCFS
 
 int client_schedule[MAXCLIENT];
@@ -58,6 +58,7 @@ int main(int argc, char **argv)
 	int fd;
 	FILE *fpin;
 	char request[BUFSIZ];
+
 
     while((choice = getopt(argc,argv,"dhl:p:r:t:n:s:")) != -1)
     {
@@ -141,12 +142,19 @@ int main(int argc, char **argv)
 	
 	//multithreading
 	
-	t_ptr = calloc(THREADNUM_R, sizeof(Thread));
+	t_ptr = calloc(THREADNUM, sizeof(Thread));
 	ihead=itail=0;
-	for(int i=0 ;i< THREADNUM_R+2;i++) {
-		 thread_create(i); 
+	// Why create THREADNUM+2?? 
+	/*
+	for(int i=0 ;i< THREADNUM+2;i++) {
+		thread_create(i); 
+		//fprintf(stderr,"hi\n");
 	}
-	pthread_join(t_ptr[0].thread_id,NULL);
+	*/
+	thread_create(0);
+	thread_create(1);
+	thread_create(2);
+	//pthread_join(t_ptr[0].thread_id,NULL);
 	//multithreading:ends
 	
 	while(1)
@@ -305,15 +313,19 @@ show_dir(char *dir, int fd)
 }
 //multithreading
 
+
+
 static struct in_addr cli_addr; //structure for client address;
 char *client_addr;
 void thread_create(int i)
  {
-     if(i==0)
-	pthread_create(&t_ptr[i].thread_id, NULL, &thread_listen, (void *)i);
-     if(i==1)
-	pthread_create(&t_ptr[i].thread_id, NULL, &thread_schedule, (void *)i);
-     else{
+     if(i==0){
+		 pthread_create(&t_ptr[i].thread_id, NULL, &thread_listen, (void *)i);
+	 }
+     else if(i==1){	
+		 pthread_create(&t_ptr[i].thread_id, NULL, &thread_schedule, (void *)i);
+	}
+     else if (i == 2){
 		 	thpool_t* threadpool; /* make a new thread pool structure */
 			threadpool=thpool_init(THREADNUM); /* initialise it to  number of threads */
 	//pthread_create(&t_ptr[i].thread_tid, NULL, &thread_rest, (void *)i);
@@ -336,15 +348,16 @@ thpool_t* thpool_init(int threadNum){
 	return NULL;
 	}
 	for (int t=0; t<threadNum; t++){
-	printf("Created thread %d in pool \n", t);
+	fprintf(stderr,"Created thread %d in pool \n", t);
 	pthread_create(&(pool_ptr->thread_id[t]), NULL, (void *)thread_exec, (void *)pool_ptr); 
 	}
 
 }
 void *thread_listen(){
 	//this method(thread) will listen for the incoming requests and put them in a queue
+	
 	while(true){
-		int length=0;
+	int length=0;
 	client_addr = inet_ntoa(cli_addr);
 	length = sizeof(cli_addr);
 	socket_client_id= accept(socket_id, (struct sockaddr *)&cli_addr, &length);
@@ -358,26 +371,28 @@ void *thread_listen(){
 	 if(itail==MAXCLIENT)
 			itail=0;
 	pthread_cond_signal(&clientId_cond);
-    pthread_mutex_unlock(&clientId_mutex);
+    pthread_mutex_unlock(&clientId_mutex);	
 	 }	
 }
 
 void *thread_schedule(){
 	//this method(thread) will pick the requests from the ready queue and schedule them according to policies
-	sleep(TIME);
-	//sleep(5);
+	//sleep(TIME);
+	
+	sleep(1);
 	while(true){
 	pthread_mutex_lock(&clientId_mutex);
 	while(ihead==itail){
+	 //   fprintf(stderr,"hello baby\n");
 		pthread_cond_wait(&clientId_cond, &clientId_mutex);
 	}
-	while(ihead!=itail){
+	while(ihead!=itail){		
 	if(SCHED==1){
-		//int value= sjf(clientId[ihead]);
+		int value= sjf(clientId[ihead]);
 		ihead=ihead+1;
 	}
 	else{
-		//int value= fcfs(clientId[ihead]);
+		int value= fcfs(clientId[ihead]);
 		ihead=ihead+1;
 	}
 	if( ihead==MAXCLIENT){
@@ -386,7 +401,7 @@ void *thread_schedule(){
    }
    pthread_mutex_unlock(&clientId_mutex);
    pthread_mutex_lock(&clientId_req_mutex);	
-	while(ihead == itail)
+	while(iput_req == iget_req)
 	pthread_cond_wait(&clientId_req_cond,&clientId_req_mutex);
     
     pthread_cond_signal(&clientId_req_cond); //signal one of the execution threads
@@ -397,14 +412,31 @@ void *thread_schedule(){
 } 
 
 void *thread_exec(){
+	FILE *fpin;
+	char request[BUFSIZ];
+	
 	//these are the threads which will execute different requests
 	pthread_mutex_lock(&clientId_req_mutex);
+	
 	while(iput_req == iget_req)
 	{
+		 
 		pthread_cond_wait(&clientId_req_cond,&clientId_req_mutex);
 	}
 	
 		int socketid=client_schedule[iget_req]; //get request from scheduling queue
+	    fprintf(stderr,"hello baby\n");
+		fpin = fdopen(socketid,"r");
+		// read request
+		fgets(request,BUFSIZ,fpin);
+#ifdef DEBUG	
+printf("got one! request = %s",request);
+#endif
+		//find_crnl(fpin);
+		process_request(request,socketid);
+		close(socketid);
+		fclose(fpin);
+		
 		//do request part
 		//coding needs to be done for request part
 		pthread_mutex_unlock(&clientId_req_mutex);

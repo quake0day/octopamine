@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/utsname.h>        /* uname() */
+#include <sys/utsname.h>      /* uname() */
 #include <semaphore.h>
 #include <pthread.h>
 
