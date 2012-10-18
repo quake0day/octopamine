@@ -20,3 +20,8 @@ scheduling.o: scheduling.c
 # For the debug mode
 debug: main.o logging.o scheduling.o
 	$(CC) $(CFLAGS) $(DEBUG) -o myhttpd main.o logging.o scheduling.o
+
+clean:
+	@- $(RM) *.o
+	@- $(RM) myhttpd
+	@- echo "Data Cleansing Done.Ready to Compile"
