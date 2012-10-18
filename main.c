@@ -13,21 +13,34 @@
 int DEBUG_MODE = 0; // DEBUG mode: off
 int LOGGING = 0; // LOGGING mode : off
 int HELP = 0; // HELP mode : off
-int PORT = 8082; // httpd listening port, default is 8080
+int PORT = 8080; // httpd listening port, default is 8080
 int TIME = 60; // queuing time(s), default is 60(s)
 int THREADNUM = 4; // Number of threads in thread pool
 int SCHED = 0; // scheduling policy FCFS=0 SJF=1, default is FCFS
+
+int client_schedule[MAXCLIENT];
+int iput_req,iget_req;
+
+int clientId[MAXCLIENT];
+int itail,ihead;
 
 void process_request(char *rq, int fd);
 int request_arg_judge(char *f);
 int request_file_type(char *f);
 void provide_header(int file_type,int fd);
-char show_date();
+
+//multithreading
+
+ 
+
+Thread *t_ptr;
+int socket_id,socket_client_id; /* define socket id */
+
 int main(int argc, char **argv)
 {
 	struct sockaddr_in sockaddr; /* incoming address */
 	
-	int socket_id; /* define socket id */
+	//int socket_client_id; /* define socket id */
 	
 	
     // NEED CHANGE
@@ -72,13 +85,14 @@ int main(int argc, char **argv)
                 THREADNUM_R = optarg;
                 break;
             case 's':
+           	 	printf(" enter 0 for FCFS and 1 for SJF");
                 SCHED_R = optarg;
                 break;
             case '?':
                 if(optopt == 'l')
-                    fprintf(stderr,"Option -%c requires an argument.",optopt);
+                    printf(stderr,"Option -%c requires an argument.",optopt);
                 else
-                    fprintf(stderr,"Unknown option");
+                    printf(stderr,"Unknown option");
                 return 1;
             default:
                 abort();
@@ -116,7 +130,7 @@ int main(int argc, char **argv)
 	
 	//NEED CHANGE !!
 	sockaddr.sin_port = htons(PORT); /* socket port */
-	
+	sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	sockaddr.sin_family = AF_INET; /* addr family */
 	if ( bind(socket_id,(struct sockaddr *) &sockaddr, sizeof(sockaddr)) != 0 ) // bind socket to cetrain addr
 		return -1;
@@ -124,6 +138,16 @@ int main(int argc, char **argv)
 	/* listen for incomming calls */
 	if(listen(socket_id,1) != 0)
 		return -1;
+	
+	//multithreading
+	
+	t_ptr = calloc(THREADNUM_R, sizeof(Thread));
+	ihead=itail=0;
+	for(int i=0 ;i< THREADNUM_R+2;i++) {
+		 thread_create(i); 
+	}
+	pthread_join(t_ptr[0].thread_id,NULL);
+	//multithreading:ends
 	
 	while(1)
 	{
@@ -259,15 +283,12 @@ show_404(char *arg, int fd)
 void provide_header(int file_type,int fd)
 {
 	FILE *fp = fdopen(fd,"w");
-	char *timebuf = NULL;
 	/*
 #ifdef DEBUG			
 			printf("I'm in provide_header\n");
 			printf("This file type is %d\n",file_type);
 #endif		*/
 	fprintf(fp,"HTTP/1.0 200 OK\r\n");
-	*timebuf = show_date();
-	fprintf(fp,"Date:%s",timebuf);
 	/* If it is a html file */
 	if(file_type == 0){
 		fprintf(fp,"Content-type:text/html");	
@@ -282,16 +303,109 @@ show_dir(char *dir, int fd)
 {
 	
 }
+//multithreading
 
-char show_date()
-{
- 	char timebuf[100];
-	/* Obtain current time as seconds elapsed since the Epoch. */
-	time_t t;
-	time(&t);
-    /* Convert to 
-	Sun, 06 Nov 1994 08:49:37 GMT    ; 
-	RFC 822, updated by RFC 1123 */
-	strftime(timebuf,sizeof(timebuf),"%a, %d %b %Y %H:%M:%S GMT",gmtime(&t));
-	return *timebuf;
+static struct in_addr cli_addr; //structure for client address;
+char *client_addr;
+void thread_create(int i)
+ {
+     if(i==0)
+	pthread_create(&t_ptr[i].thread_id, NULL, &thread_listen, (void *)i);
+     if(i==1)
+	pthread_create(&t_ptr[i].thread_id, NULL, &thread_schedule, (void *)i);
+     else{
+		 	thpool_t* threadpool; /* make a new thread pool structure */
+			threadpool=thpool_init(THREADNUM); /* initialise it to  number of threads */
+	//pthread_create(&t_ptr[i].thread_tid, NULL, &thread_rest, (void *)i);
+	}
+                       /* main thread returns */
+ }
+
+//this method will intialize the thread pool
+thpool_t* thpool_init(int threadNum){
+	thpool_t *pool_ptr;
+	pool_ptr=(thpool_t*)malloc(sizeof(thpool_t));
+	if (pool_ptr==NULL){
+	fprintf(stderr, "thpool_init(): Could not allocate memory for thread pool\n");
+	return NULL;
+	}
+	pool_ptr->thread_count=threadNum;
+	pool_ptr->thread_id=(pthread_t*)malloc(threadNum*sizeof(pthread_t)); /* MALLOC thread IDs */
+	if (pool_ptr->thread_id==NULL){
+	fprintf(stderr, "thpool_init(): Could not allocate memory for thread IDs\n");
+	return NULL;
+	}
+	for (int t=0; t<threadNum; t++){
+	printf("Created thread %d in pool \n", t);
+	pthread_create(&(pool_ptr->thread_id[t]), NULL, (void *)thread_exec, (void *)pool_ptr); 
+	}
+
+}
+void *thread_listen(){
+	//this method(thread) will listen for the incoming requests and put them in a queue
+	while(true){
+		int length=0;
+	client_addr = inet_ntoa(cli_addr);
+	length = sizeof(cli_addr);
+	socket_client_id= accept(socket_id, (struct sockaddr *)&cli_addr, &length);
+	if(socket_client_id< 0)
+	{
+		exit(1);
+	}
+	 pthread_mutex_lock(&clientId_mutex);
+	 clientId[itail]=socket_client_id;
+	 itail++;
+	 if(itail==MAXCLIENT)
+			itail=0;
+	pthread_cond_signal(&clientId_cond);
+    pthread_mutex_unlock(&clientId_mutex);
+	 }	
+}
+
+void *thread_schedule(){
+	//this method(thread) will pick the requests from the ready queue and schedule them according to policies
+	sleep(TIME);
+	//sleep(5);
+	while(true){
+	pthread_mutex_lock(&clientId_mutex);
+	while(ihead==itail){
+		pthread_cond_wait(&clientId_cond, &clientId_mutex);
+	}
+	while(ihead!=itail){
+	if(SCHED==1){
+//int value= sjf(clientId[ihead]);
+		ihead=ihead+1;
+	}
+	else{
+		int value= fcfs(clientId[ihead]);
+		ihead=ihead+1;
+	}
+	if( ihead==MAXCLIENT){
+		ihead=0;
+	}
+   }
+   pthread_mutex_unlock(&clientId_mutex);
+   pthread_mutex_lock(&clientId_req_mutex);	
+	while(ihead == itail)
+	pthread_cond_wait(&clientId_req_cond,&clientId_req_mutex);
+    
+    pthread_cond_signal(&clientId_req_cond); //signal one of the execution threads
+
+	pthread_mutex_unlock(&clientId_req_mutex);
+     }
+		
+} 
+
+void *thread_exec(){
+	//these are the threads which will execute different requests
+	pthread_mutex_lock(&clientId_req_mutex);
+	while(iput_req == iget_req)
+	{
+		pthread_cond_wait(&clientId_req_cond,&clientId_req_mutex);
+	}
+	
+		int socketid=client_schedule[iget_req]; //get request from scheduling queue
+		//do request part
+		//coding needs to be done for request part
+		pthread_mutex_unlock(&clientId_req_mutex);
 }
