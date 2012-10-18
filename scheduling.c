@@ -15,7 +15,7 @@ return 1;
 }
 
 
-int SJF(int client_socket_id)
+int sjf(int client_socket_id)
 {
 	return 1;
 }

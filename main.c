@@ -373,11 +373,11 @@ void *thread_schedule(){
 	}
 	while(ihead!=itail){
 	if(SCHED==1){
-//int value= sjf(clientId[ihead]);
+		//int value= sjf(clientId[ihead]);
 		ihead=ihead+1;
 	}
 	else{
-		int value= fcfs(clientId[ihead]);
+		//int value= fcfs(clientId[ihead]);
 		ihead=ihead+1;
 	}
 	if( ihead==MAXCLIENT){
