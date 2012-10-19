@@ -155,17 +155,17 @@ int main(int argc, char **argv)
     //fprintf(stderr,"hi\n");
     }
     */
-    thread_create(0);
-    thread_create(1);
-    thread_create(2);
+	// thread_create(0);
+	// thread_create(1);
+   // thread_create(2);
 	
 	// Something worg... we not be able to use threadpool
-    pthread_join(t_ptr[0].thread_id,NULL);
+   // pthread_join(t_ptr[0].thread_id,NULL);
     //multithreading:ends
-	/*
+	
     while(1)
     {
-         take a call and save it to buffer 
+        // take a call and save it to buffer 
         fd = accept(socket_id,NULL,NULL);
         if(fd == -1)
             break;
@@ -181,7 +181,7 @@ int main(int argc, char **argv)
         close(fd);
         fclose(fpin);
     }
-	*/
+	
     return 0; // the end... die!!!!!!!!
 
 }
@@ -318,7 +318,7 @@ printf("This file type is %d\n",file_type);
 	
     fprintf(fp,"HTTP/1.0 200 OK\r\n");
 	//*timebuf = show_date();
-	fprintf(fp,"Date:%s\n",timebuf);
+	//fprintf(fp,"Date:%s\n",timebuf);
 	serverv = "A minimal web server (version 1.0 alpha)";
 	fprintf(fp,"Server:%s\n",serverv);
 	modtimebuf = ctime(&info.st_mtime);
@@ -468,14 +468,13 @@ void *thread_exec(){
     }
 
     int socketid=client_schedule[iget_req]; //get request from scheduling queue
-    fprintf(stderr,"hello baby\n");
     fpin = fdopen(socketid,"r");
     // read request
     fgets(request,BUFSIZ,fpin);
 #ifdef DEBUG	
     printf("got one! request = %s",request);
 #endif
-    find_crnl(fpin);
+	find_crnl(fpin);
     process_request(request,socketid);
     close(socketid);
     fclose(fpin);
