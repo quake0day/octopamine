@@ -19,7 +19,7 @@ scheduling.o: scheduling.c
 
 # For the debug mode
 debug: main.o logging.o scheduling.o
-	$(CC) $(CFLAGS) $(DEBUG) -o myhttpd main.o logging.o scheduling.o
+	$(CC) $(CFLAGS) $(DEBUG) -o myhttpd main.c logging.c scheduling.c
 
 clean:
 	@- $(RM) *.o
