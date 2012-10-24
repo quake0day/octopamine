@@ -3,7 +3,7 @@
 # make: output normal version execution file
 # make debug: output debug version execution file
 CC = gcc
-CFLAGS = -O -Wall -ansi -lpthread -std=c99 -m64
+CFLAGS = -O -Wall -lpthread -std=c99 -pedantic -D_XOPEN_SOURCE=600 -pthread
 DEBUG = -DDEBUG
 myhttpd: main.o logging.o scheduling.o
 	$(CC) $(CFLAGS) -o myhttpd main.o logging.o scheduling.o

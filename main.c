@@ -150,12 +150,12 @@ int main(int argc, char **argv)
     t_ptr = calloc(THREADNUM, sizeof(Thread));
     ihead=itail=0;
     // Why create THREADNUM+2?? 
-    /*
-       for(int i=0 ;i< THREADNUM+2;i++) {
+   
+    for(int i=0 ;i< THREADNUM+2;i++) {
        thread_create(i); 
     //fprintf(stderr,"hi\n");
     }
-    */
+    
 	// thread_create(0);
 	// thread_create(1);
    // thread_create(2);
@@ -370,9 +370,9 @@ void thread_create(int i)
         pthread_create(&t_ptr[i].thread_id, NULL, &thread_schedule, (void *)i);
     }
     else if (i == 2){
-        thpool_t* threadpool; /* make a new thread pool structure */
-        threadpool=thpool_init(THREADNUM); /* initialise it to  number of threads */
-        //pthread_create(&t_ptr[i].thread_tid, NULL, &thread_rest, (void *)i);
+        //thpool_t* threadpool; /* make a new thread pool structure */
+        //threadpool=thpool_init(THREADNUM); /* initialise it to  number of threads */
+        pthread_create(&t_ptr[i].thread_id, NULL, &thread_exec, (void *)i);
     }
     /* main thread returns */
 }
