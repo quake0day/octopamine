@@ -19,7 +19,7 @@
 
 void logging(char *log_file, char *ip_addr, char *request_queuing_time, char *request_scheduling_time,char *req)
 {
-    char logbuf[1024];
+    char logbuf[100]="ABC";
     FILE *fp;
     char *filepath=NULL;
     filepath=log_file;
@@ -46,7 +46,7 @@ void logging(char *log_file, char *ip_addr, char *request_queuing_time, char *re
     {
 
         status=200;
-        size= info.st_size;
+        size= (char*)info.st_size;
 
     }
     else
@@ -56,13 +56,15 @@ void logging(char *log_file, char *ip_addr, char *request_queuing_time, char *re
     }
     if(DEBUG_MODE==0)
     {
-        (void)printf("%s - [%s] [%s] \"%s\" %d %d\n",ip_addr,t,tt,req,status,size);
+        (void)printf("%s - [%s] [%s] \"%s\" %d %s\n",ip_addr,t,tt,req,status,size);
     }
 
     else
     {
 
-        (void)sprintf(logbuf,"%s [%s] [%s] \"%s\" %d %d\n",ip_addr,t,tt,req,status,size);
+      //  snprintf(logbuf,8,"%s [%s] [%s] \"%s\" %d %s\n",ip_addr,t,tt,req,status,size);
+        
+        
         if((fp=open(filepath,O_CREAT|O_WRONLY|O_APPEND,0644)) >= 0){
             (void)write(fp,logbuf,strlen(logbuf));
             //(void)write(fp,"\n",2);

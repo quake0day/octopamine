@@ -8,7 +8,7 @@
 #include "main.h"
 #include <sys/stat.h>
 
-
+/*
 
 int fcfs(int client_socket_id)
 {
@@ -62,3 +62,4 @@ int sjf(int client_socket_id)
     }
     return 1;
 }
+ */

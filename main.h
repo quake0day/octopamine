@@ -49,6 +49,8 @@ extern int itail,ihead;
 
 pthread_mutex_t clientId_mutex;
 pthread_cond_t clientId_cond;
+pthread_mutex_t client_pro_cond;
+pthread_mutex_t client_enter_cond;
 pthread_mutex_t clientId_req_mutex;
 pthread_cond_t clientId_req_cond;
 
@@ -56,12 +58,12 @@ typedef enum __bool { false = 0, true = 1, } bool;
 
 typedef void* (*FUNC)(void* arg);
 
-typedef struct _thpool_job_t{
+typedef struct thpool_job_t{
     FUNC 			 function;
     void*                   arg;     //function parameter
     int 			 socket_client_ID;
-    struct _thpool_job_t* prev;     // aim to the previous node
-    struct _thpool_job_t* next;	    // aim to the next node
+    struct thpool_job_t* prev;     // aim to the previous node
+    struct thpool_job_t* next;	    // aim to the next node
 } thpool_job_t;
 
 /**
@@ -87,7 +89,19 @@ typedef struct Thread{
     long thread_count;       // # connections handled
 } Thread;
 
-void get_file(int fd,char *f);
+void process_request(char *rq, int fd);
+int request_arg_judge(char *f);
+int request_file_type(char *f);
+void provide_header(int file_type,char *f,FILE *socket);
+char *show_date();
+int find_crnl(FILE *fp);
+int show_404(char *arg, int fd);
+int show_dir(char *dir, int fd);
+int thpool_jobqueue_clean(thpool_t* thread_p);
+int show_job_queue(thpool_t* thread_p);
+
+
+void get_file(int fd,char *f,FILE* socket);
 void logging(char *, char *,char *,char *, char *);
 //int sjf(int client_socket_id);
 //int fcfs(int client_socket_id);

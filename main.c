@@ -27,16 +27,7 @@ thpool_t* threadpool; /* make a new thread pool structure */
 int clientId[MAXCLIENT];
 int itail,ihead;
 
-void process_request(char *rq, int fd);
-int request_arg_judge(char *f);
-int request_file_type(char *f);
-void provide_header(int file_type,int fd,char *f);
-char *show_date();
-int find_crnl(FILE *fp);
-int show_404(char *arg, int fd);
-int show_dir(char *dir, int fd);
-int thpool_jobqueue_clean(thpool_t* thread_p);
-int show_job_queue(thpool_t* thread_p);
+
 
 // multithreading params init
 Thread *t_ptr;
@@ -51,7 +42,16 @@ char *request_scheduling_time=0;
 char  *str=0;
 
 
+pthread_mutex_t clientId_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t client_pro_cond = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t client_enter_cond = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t clientId_req_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t  clientId_req_cond = PTHREAD_COND_INITIALIZER;
+pthread_cond_t  clientId_cond = PTHREAD_COND_INITIALIZER;
+
 char timebuf[1000];
+
+char *LOGGING_PATH = NULL;
 
 //method for getting current time
 char* get_time()
@@ -87,9 +87,6 @@ int main(int argc, char **argv)
     int choice;
 
     // handle request
-    int fd;
-    FILE *fpin;
-    char request[BUFSIZ];
 
 
     while((choice = getopt(argc,argv,"dhl:p:r:t:n:s:")) != -1)
@@ -179,18 +176,17 @@ int main(int argc, char **argv)
     ihead=itail=0;
     // Why create THREADNUM+2??
 
-    /*
-       Thread* plisten;
-       plisten = (Thread*) malloc(sizeof(Thread));
-       pthread_create(&plisten, NULL, &thread_listen, NULL);
-       Thread* pschedule;
-       pschedule = (Thread*) malloc(sizeof(Thread));
-       pthread_create(&pschedule, NULL, &thread_schedule, NULL);
-       threadpool=thpool_init(THREADNUM);
-       pthread_join(pschedule,NULL);
-       pthread_join(plisten,NULL);
+    threadpool=thpool_init(THREADNUM);
+    pthread_t* plisten;
+    plisten = (pthread_t*) malloc(sizeof(pthread_t));
+    pthread_create(plisten, NULL, &thread_listen, NULL);
+    pthread_t*  pschedule;
+    pschedule = (pthread_t*) malloc(sizeof(pthread_t));
+    pthread_create(pschedule, NULL, &thread_schedule, NULL);
+    pthread_join(*pschedule,NULL);
+    pthread_join(*plisten,NULL);
 
-*/
+
 
     /*
        for(int i=0 ;i< THREADNUM+2;i++) {
@@ -205,43 +201,43 @@ int main(int argc, char **argv)
 
     // Something worg... we not be able to use threadpool
     //multithreading:ends
+    /*
+       while(1)
+       {
+    // take a call and save it to buffer
+    fd = accept(socket_id,NULL,NULL);
+    client_addr = inet_ntoa(cli_addr);
+    if(fd == -1)
+    break;
+    fpin = fdopen(fd,"r");
 
-    while(1)
-    {
-        // take a call and save it to buffer
-        fd = accept(socket_id,NULL,NULL);
-        client_addr = inet_ntoa(cli_addr);
-        if(fd == -1)
-            break;
-        fpin = fdopen(fd,"r");
-
-        // read request
-        fgets(request,BUFSIZ,fpin);
+    // read request
+    fgets(request,BUFSIZ,fpin);
 #ifdef DEBUG
-        printf("got one! request = %s",request);
+printf("got one! request = %s",request);
 #endif
-        find_crnl(fpin);
-        process_request(request,fd);
-        //divya's part start from here
-        //include this part in execution threads
-        request_queuing_time=get_time(); //call this function from queuing thread
-        request_scheduling_time=get_time();//call this function from scheduling thread
+find_crnl(fpin);
+process_request(request,fd);
+    //divya's part start from here
+    //include this part in execution threads
+    request_queuing_time=get_time(); //call this function from queuing thread
+    request_scheduling_time=get_time();//call this function from scheduling thread
 
-        if(LOGGING){
+    if(LOGGING){
 #ifdef DEBUG
-            fprintf(stderr," I am going into logging\n");
+fprintf(stderr," I am going into logging\n");
 #endif
-            logging(LOGGING_PATH,client_addr,request_queuing_time,request_scheduling_time,request);
-        }
-        //divya's part end here
-        close(fd);
-        fclose(fpin);
+logging(LOGGING_PATH,client_addr,request_queuing_time,request_scheduling_time,request);
+}
+    //divya's part end here
+    close(fd);
+    fclose(fpin);
     }
-
+    */
 
     return 0; // the end... die!!!!!!!!
 
-}
+    }
 
 
 /* skip over all request only concerned on CRNL */
@@ -266,9 +262,9 @@ void process_request(char *rq, int fd)
     int filetype;
     //fork a new process to dealing this....
     // NEED change!
-    if(fork() != 0)
-        return;
-    
+ //   if(fork() != 0)
+   //     return;
+
     strcpy(arg_f,"./");  //process arguments starts with ./
     if(sscanf(rq, "%s %s",cmd, arg_f +2) != 2)
         return;
@@ -289,15 +285,14 @@ void process_request(char *rq, int fd)
                     printf("Now I'm in reqtype:0\n");
 #endif
                     filetype = request_file_type(arg_f);
-                    
+
 #ifdef DEBUG
                     printf("filetype:%d\n",filetype);
 #endif
-                    provide_header(filetype,fd,arg_f);
-                    get_file(fd,arg_f);
+                    provide_header(filetype,arg_f,fp);
+                    get_file(fd,arg_f,fp);
                     break;
                 case 1:
-                    printf("I'm now in the directory\n");
                     show_dir(arg_f,fd);
                     break;
                 case 2:
@@ -313,7 +308,7 @@ void process_request(char *rq, int fd)
 #ifdef DEBUG
             printf("filetype:%d\n",filetype);
 #endif
-            provide_header(filetype,fd,arg_f);
+            provide_header(filetype,arg_f,fp);
         }
         else if(strcmp(cmd,"~") == 0)
         {
@@ -375,35 +370,35 @@ int show_404(char *arg, int fd)
 /*
  * Provide the reply header for html and gif if they exists
  */
-void provide_header(int file_type,int fd,char *f)
+void provide_header(int file_type,char *f,FILE *socket)
 {
     // note that fd represent socket id
-	// f represent the request file's name
-	// file_type means file_type...
-	
-	FILE *fp = fdopen(fd,"w");
+    // f represent the request file's name
+    // file_type means file_type...
+
+    FILE *fp = socket;
     FILE *arg_file = fopen(f,"r");
-	struct stat info;
-	stat(f,&info);
-	char *timebuff = NULL;
-	char *serverv = NULL;
-	char *modtimebuf = NULL;
-	int file_size;
+    struct stat info;
+    stat(f,&info);
+    char *timebuff = NULL;
+    char *serverv = NULL;
+    char *modtimebuf = NULL;
+    long file_size;
     /*
-     #ifdef DEBUG
-     printf("I'm in provide_header\n");
-     printf("This file type is %d\n",file_type);
-     #endif		*/
+#ifdef DEBUG
+printf("I'm in provide_header\n");
+printf("This file type is %d\n",file_type);
+#endif		*/
     // By Suqiang
-    
+
     fprintf(fp,"HTTP/1.0 200 OK\r\n");
-	timebuff = show_date();
-	fprintf(fp,"Date:%s\n",timebuff);
-	serverv = "A minimal web server (version 1.0 alpha)";
-	fprintf(fp,"Server:%s\n",serverv);
-	modtimebuf = ctime(&info.st_mtime);
-	fprintf(fp,"Last-Modified:%s",modtimebuf);
-	
+    timebuff = show_date();
+    fprintf(fp,"Date:%s\n",timebuff);
+    serverv = "A minimal web server (version 1.0 alpha)";
+    fprintf(fp,"Server:%s\n",serverv);
+    modtimebuf = ctime(&info.st_mtime);
+    fprintf(fp,"Last-Modified:%s",modtimebuf);
+
     /* If it is a html file */
     if(file_type == 0){
         fprintf(fp,"Content-type:text/html\n");
@@ -412,9 +407,9 @@ void provide_header(int file_type,int fd,char *f)
     if(file_type == 1){
         fprintf(fp,"Content-type:image/gif\n");
     }
-	file_size = info.st_size;
-	fprintf(fp,"Content-Length:%d\n\n",file_size);
-    fclose(fp);
+    file_size = info.st_size;
+    fprintf(fp,"Content-Length:%ld\n\n",file_size);
+
     fclose(arg_file);
 }
 
@@ -435,40 +430,40 @@ int show_dir(char *dir, int fd)
     return 0;
 }
 
-void get_file(int fd,char *f)
+void get_file(int fd,char *f,FILE* socket)
 {
-	FILE *fp, *arg_file;
-	int c;
-	fp=fdopen(fd,"w");
-	arg_file=fopen(f,"r");
-	if(fp!=NULL && arg_file!=NULL)
-	{
-		fprintf(fp,"\r\n");
-		while((c=getc(arg_file))!=EOF)
-		{
-            putc(c,fp);
-	    }
-	    fclose(arg_file);
-	    fclose(fp);
-	}
-	exit(0);
+    FILE *arg_file;
+    int c;
+   // fp=fdopen(fd,"w");
+    arg_file=fopen(f,"r");
+    if(socket!=NULL && arg_file!=NULL)
+    {
+        //fprintf(socket,"\r\n");
+        while((c=getc(arg_file))!=EOF)
+        {
+            putc(c,socket);
+        }
+        fclose(arg_file);
+      //  fclose(fp);
+    }
+   // exit(0);
 }
 
 
 
 char *show_date() //good!
 {
- 	//char timebuf[1000];
- 	struct tm *newtime;
-	/* Obtain current time as seconds elapsed since the Epoch. */
-	time_t t;
-	time(&t);
-	newtime=localtime(&t);
+    //char timebuf[1000];
+    struct tm *newtime;
+    /* Obtain current time as seconds elapsed since the Epoch. */
+    time_t t;
+    time(&t);
+    newtime=localtime(&t);
     /* Convert to
-     Sun, 06 Nov 1994 08:49:37 GMT    ;
-     RFC 822, updated by RFC 1123 */
-	strftime(timebuf,sizeof(timebuf),"%a,%d/%b/%Y:%H:%M:%S GMT",newtime);
-	return timebuf;
+       Sun, 06 Nov 1994 08:49:37 GMT    ;
+       RFC 822, updated by RFC 1123 */
+    strftime(timebuf,sizeof(timebuf),"%a,%d/%b/%Y:%H:%M:%S GMT",newtime);
+    return timebuf;
 }
 
 
@@ -514,20 +509,8 @@ thpool_t* thpool_init(int threadNum){
         return NULL;
     }
 
-    /* need something here */
-
-    /*
-       typedef struct thpool_job_queue{
-       thpool_job_t*    head;            // head of the queue
-       thpool_job_t*    tail;			   // tail of the queue
-       int              jobN;					  // number of jobs
-       sem_t*           queueSem;			  // x sem
-       }thpool_jobqueue;
-       */
-
-
     if(thpool_jobqueue_init(pool_ptr))
-        return -1;
+        perror("Init jobqueue error exit...");
     pool_ptr->jobqueue->queueSem = (sem_t*)malloc(sizeof(sem_t));
     sem_init(pool_ptr->jobqueue->queueSem,0,1);
 
@@ -586,7 +569,7 @@ int thpool_jobqueue_clean(thpool_t* thread_p)
     }
     thread_p -> jobqueue -> head = NULL;
     thread_p -> jobqueue -> tail = NULL;
-    
+
     return 0;
 
 }
@@ -601,6 +584,7 @@ int thpool_jobqueue_init(thpool_t* thread_p){
 
     return 0;
 }
+
 // get one node from queue one
 thpool_job_t* thpool_jobqueue_peek(thpool_t* thread_p)
 {
@@ -626,7 +610,11 @@ int thpool_jobqueue_removelast(thpool_t* thread_p)
         default:
             lastjob->prev->next = NULL;
             thread_p->jobqueue->tail = lastjob->prev;
+        
     }
+    (thread_p->jobqueue->jobN)--;
+    int reval;
+    sem_getvalue(thread_p->jobqueue->queueSem, &reval);
     return 0;
 }
 
@@ -658,7 +646,7 @@ int thpool_jobqueue_addone(thpool_t* thread_p, thpool_job_t* newjob)
 
     int reval;
     sem_getvalue(thread_p -> jobqueue -> queueSem, &reval);
-    
+
     return 0;
 
 }
@@ -676,9 +664,8 @@ void *thread_listen(){
         {
             fprintf(stderr,"In listen, cannot allocate memory for new job\n");
         }
-        int length=0;
         client_addr = inet_ntoa(cli_addr);
-        length = sizeof(cli_addr);
+        socklen_t length = (socklen_t)sizeof(cli_addr);
         socket_client_id= accept(socket_id, (struct sockaddr *)&cli_addr, &length);
         if(socket_client_id< 0)
         {
@@ -687,11 +674,8 @@ void *thread_listen(){
         newjob -> socket_client_ID = socket_client_id;
         pthread_mutex_lock(&clientId_mutex);
         thpool_jobqueue_addone(threadpool,newjob);
-        clientId[itail]=socket_client_id;
-        itail++;
-        if(itail==MAXCLIENT)
-            itail=0;
-        pthread_cond_signal(&clientId_cond);
+        pthread_cond_signal(&clientId_req_cond);
+        // pthread_cond_wait(&client_pro_cond,&clientId_req_mutex);
         pthread_mutex_unlock(&clientId_mutex);
         show_job_queue(threadpool);
     }
@@ -707,85 +691,168 @@ int show_job_queue(thpool_t* thread_p)
 
 
 void *thread_schedule(){
+    /*
+       while(true){
+
+       thpool_job_t* job_p;
+       int jobNum;
+       pthread_mutex_lock(&clientId_mutex);
+
+       if(threadpool->jobqueue->tail != threadpool->jobqueue->head){
+       job_p = thpool_jobqueue_peek(threadpool);
+    //fprintf(stderr, "%d",job_p->socket_client_ID);
+    }
+    else{
+    pthread_cond_wait(&clientId_cond, &clientId_mutex);
+    }
+    // job_p = thpool_jobqueue_peek(threadpool);
+
+    pthread_mutex_unlock(&clientId_mutex);
+
+
+    pthread_mutex_lock(&clientId_req_mutex);
+
+    pthread_mutex_unlock(&clientId_req_mutex);
+
+
     //this method(thread) will pick the requests from the ready queue and schedule them according to policies
     //sleep(TIME);
 
+    }
     // sleep(TIME);
 
+    
     while(true){
-        pthread_cond_signal(&clientId_req_cond); //signal one of the execution threads
-        fprintf(stderr,"I'm in scheduler now");
+    pthread_cond_signal(&clientId_req_cond); //signal one of the execution threads
+    fprintf(stderr,"I'm in scheduler now");
 
-        pthread_mutex_lock(&clientId_mutex);
-        /*
-           while(ihead==itail){
-        //   fprintf(stderr,"hello baby\n");
-        pthread_cond_wait(&clientId_cond, &clientId_mutex);
-        }
-        while(ihead!=itail){
-        if(SCHED==1){
-        int value= sjf(clientId[ihead]);
-        ihead=ihead+1;
-        }
-        else{
-        int value= fcfs(clientId[ihead]);
-        ihead=ihead+1;
-        }
-        if( ihead==MAXCLIENT){
-        ihead=0;
-        }
-        }
-        */
+    pthread_mutex_lock(&clientId_mutex);
 
-        pthread_mutex_unlock(&clientId_mutex);
-        pthread_mutex_lock(&clientId_req_mutex);
-        while(iput_req == iget_req)
-            pthread_cond_wait(&clientId_req_cond,&clientId_req_mutex);
-
-        pthread_cond_signal(&clientId_req_cond); //signal one of the execution threads
-
-        pthread_mutex_unlock(&clientId_req_mutex);
+    while(ihead==itail){
+    //   fprintf(stderr,"hello baby\n");
+    pthread_cond_wait(&clientId_cond, &clientId_mutex);
     }
+    while(ihead!=itail){
+    if(SCHED==1){
+    // int value= sjf(clientId[ihead]);
+    ihead=ihead+1;
+    }
+    else{
+    // int value= fcfs(clientId[ihead]);
+    ihead=ihead+1;
+    }
+    if( ihead==MAXCLIENT){
+    ihead=0;
+    }
+    }
+
+
+    pthread_mutex_unlock(&clientId_mutex);
+    pthread_mutex_lock(&clientId_req_mutex);
+    while(iput_req == iget_req)
+    pthread_cond_wait(&clientId_req_cond,&clientId_req_mutex);
+
+    pthread_cond_signal(&clientId_req_cond); //signal one of the execution threads
+
+    pthread_mutex_unlock(&clientId_req_mutex);
+    }
+
+*/
+
+    return 0;
 
 }
 
 void thread_exec(thpool_t* thread_p){
 
 
-    FILE *fpin;
-    char request[BUFSIZ];
+
 
 
 
 
     //these are the threads which will execute different requests
-    pthread_mutex_lock(&clientId_req_mutex);
 
 
 
-    while(iput_req == iget_req)
-    {
-        pthread_cond_wait(&clientId_req_cond,&clientId_req_mutex);
-    }
-    fprintf(stderr,"I'm in exec\n");
+    /*
+       while(iput_req == iget_req)
+       {
+       pthread_cond_wait(&clientId_req_cond,&clientId_req_mutex);
+       }
+       fprintf(stderr,"I'm in exec\n");
 
-    int socketid=client_schedule[iget_req]; //get request from scheduling queue
-    fpin = fdopen(socketid,"r");
+       int socketid=client_schedule[iget_req]; //get request from scheduling queue
+       fpin = fdopen(socketid,"r");
     // read request
     fgets(request,BUFSIZ,fpin);
 #ifdef DEBUG
-    printf("got one! request = %s",request);
+printf("got one! request = %s",request);
 #endif
-    find_crnl(fpin);
-    process_request(request,socketid);
-    close(socketid);
-    fclose(fpin);
+find_crnl(fpin);
+process_request(request,socketid);
+close(socketid);
+fclose(fpin);
 
     //do request part
     //coding needs to be done for request part
 
+*/
+    while (true) {
 
-    pthread_mutex_unlock(&clientId_req_mutex);
 
+        FILE *fpin;
+        char request[BUFSIZ];
+        int socketid;
+        thpool_job_t* job;
+
+        pthread_mutex_lock(&client_enter_cond);
+        while(thread_p->jobqueue->tail == thread_p->jobqueue->head){
+            pthread_cond_wait(&clientId_req_cond,&client_enter_cond);
+        }
+
+            job = thpool_jobqueue_peek(thread_p);
+        socketid = job->prev->socket_client_ID;
+        
+        
+            thpool_jobqueue_removelast(threadpool);
+            fpin = fdopen(socketid,"r");
+            fgets(request,BUFSIZ,fpin);
+            find_crnl(fpin);
+            process_request(request, socketid);
+        request_queuing_time=get_time(); //call this function from queuing thread
+        request_scheduling_time=get_time();//call this function from scheduling thread
+        
+        if(LOGGING){
+#ifdef DEBUG
+            fprintf(stderr," I am going into logging\n");
+#endif
+            logging(LOGGING_PATH,client_addr,request_queuing_time,request_scheduling_time,request);
+
+        }
+        //divya's part end here
+            close(socketid);
+            fclose(fpin);
+#ifdef DEBUG
+            printf("got one! request = %s",request);
+#endif
+            // fprintf(stderr,"%s",request);
+
+
+            
+            // pthread_cond_signal(&client_pro_cond);
+
+
+        //     }
+
+        //fprintf(stderr,"%u tid",tid);
+
+        //fprintf(stderr,"Say HIHO!\n");
+        pthread_cond_broadcast(&clientId_req_cond);
+        pthread_mutex_unlock(&client_enter_cond);
+
+
+
+}
 
 }
