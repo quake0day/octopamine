@@ -60,8 +60,6 @@ typedef enum __bool { false = 0, true = 1, } bool;
 typedef void* (*FUNC)(void* arg);
 
 typedef struct thpool_job_t{
-    FUNC 			 function;
-    void*                   arg;     //function parameter
     int 			 socket_client_ID;
     long   filesize;
     char* request;
@@ -77,7 +75,6 @@ typedef struct thpool_job_queue{
     thpool_job_t*    head;            // head of the queue
     thpool_job_t*    tail;			   // tail of the queue
     int              jobN;					  // number of jobs
-    sem_t*           queueSem;			  // x sem
 }thpool_job_queue;
 
 typedef struct thpool_t{

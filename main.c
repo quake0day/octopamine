@@ -69,8 +69,6 @@ char* get_time()
     return str;
 }
 
-static int thpool_live = 1;
-
 // main
 int main(int argc, char **argv)
 {
@@ -89,8 +87,6 @@ int main(int argc, char **argv)
 
     // trace user choice
     int choice;
-
-    // handle request
 
 
     while((choice = getopt(argc,argv,"dhl:p:r:t:n:s:")) != -1)
@@ -124,6 +120,11 @@ int main(int argc, char **argv)
             case 's':
                 printf(" enter 0 for FCFS and 1 for SJF");
                 SCHED_R = optarg;
+                char *str1="sjf";
+                if(strcmp(SCHED_R,str1)==0)
+                {
+                    SCHED=1;
+                }
               //  SCHED = atoi(SCHED_R);
                 break;
             case '?':
@@ -137,6 +138,7 @@ int main(int argc, char **argv)
 
         }
     }
+    
 #ifdef DEBUG
     printf("FOR TEST::::DIR: %s \n",DIR_R);
     printf("FOR TEST::::TIME: %s \n",TIME_R);
@@ -156,16 +158,30 @@ int main(int argc, char **argv)
         printf("[-r dir] [-t time] [-n threadnum] [-s sched]\n");
         return 0;
     }
-    DEBUG_MODE=1;
-    //  logging();
+    
+    // daemonize this program
+    if(DEBUG_MODE == 0){
+        pid_t p;
+        p=fork();
+        if(p!= 0){exit(0);}
+        setsid ();
+        if((p=fork()) != 0 ){exit (0);}
+        else if(p<0){return -1;}
+        umask(0);
+        close(0);
+        close(1);
+        close(2);
+        // return 0;
+    }
 
+    
+    //DEBUG_MODE=1;
 
     //initial socket here
     socket_id = socket(PF_INET,SOCK_STREAM,0); /*initial*/
     if(socket_id == -1) /* handle exceptions */
         return -1;
-
-
+    
     //NEED CHANGE !!
     sockaddr.sin_port = htons(PORT); /* socket port */
     sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -178,11 +194,6 @@ int main(int argc, char **argv)
         return -1;
 
     //multithreading
-
-    t_ptr = calloc(THREADNUM, sizeof(Thread));
-    ihead=itail=0;
-    // Why create THREADNUM+2??
-
     threadpool=thpool_init(THREADNUM);
     pthread_t* plisten;
     plisten = (pthread_t*) malloc(sizeof(pthread_t));
@@ -192,56 +203,6 @@ int main(int argc, char **argv)
     pthread_create(pschedule, NULL, &thread_schedule, NULL);
     pthread_join(*pschedule,NULL);
     pthread_join(*plisten,NULL);
-
-
-
-    /*
-       for(int i=0 ;i< THREADNUM+2;i++) {
-       thread_create(i);
-    //fprintf(stderr,"hi\n");
-    }
-
-*/
-    // thread_create(0);
-    // thread_create(1);
-    // thread_create(2);
-
-    // Something worg... we not be able to use threadpool
-    //multithreading:ends
-    /*
-       while(1)
-       {
-    // take a call and save it to buffer
-    fd = accept(socket_id,NULL,NULL);
-    client_addr = inet_ntoa(cli_addr);
-    if(fd == -1)
-    break;
-    fpin = fdopen(fd,"r");
-
-    // read request
-    fgets(request,BUFSIZ,fpin);
-#ifdef DEBUG
-printf("got one! request = %s",request);
-#endif
-find_crnl(fpin);
-process_request(request,fd);
-    //divya's part start from here
-    //include this part in execution threads
-    request_queuing_time=get_time(); //call this function from queuing thread
-    request_scheduling_time=get_time();//call this function from scheduling thread
-
-    if(LOGGING){
-#ifdef DEBUG
-fprintf(stderr," I am going into logging\n");
-#endif
-logging(LOGGING_PATH,client_addr,request_queuing_time,request_scheduling_time,request);
-}
-    //divya's part end here
-    close(fd);
-    fclose(fpin);
-    }
-    */
-
     return 0; // the end... die!!!!!!!!
 
     }
@@ -267,12 +228,8 @@ void process_request(char *rq, int fd)
     char cmd[BUFSIZ];
     int reqtype;
     int filetype;
-    //fork a new process to dealing this....
-    // NEED change!
-    //   if(fork() != 0)
-    //     return;
 
-    strcpy(arg_f,"./");  //process arguments starts with 
+    strcpy(arg_f,"./");  //process arguments starts with
     if(sscanf(rq, "%s %s",cmd, arg_f +2) != 2)
         return;
     if(sscanf(rq,"%s",cmd)!= 0 && sscanf(rq,"%*[^/]/%[^ ]",arg_f)!= 0)
@@ -426,7 +383,7 @@ printf("This file type is %d\n",file_type);
 
 
 int show_dir(char *dir, int fd)
-    {
+{
         char *str=NULL;
         dup2(fd,2);
         FILE *fp = fdopen(fd,"w");
@@ -461,7 +418,7 @@ int show_dir(char *dir, int fd)
         closedir(dp);
         fclose(fpp);
         return 0;
-    }
+}
 
 
 void get_file(int fd,char *f,FILE* socket)
@@ -500,29 +457,9 @@ char *show_date() //good!
     return timebuf;
 }
 
-
-
-
-
 // multithreading part
 // By Divya
-static struct in_addr cli_addr; //structure for client address;
-char *client_addr;
 
-void thread_create(int i)
-{
-    if(i==0){
-        pthread_create(&t_ptr[i].thread_id, NULL, &thread_listen, (void *)i);
-    }
-    else if(i==1){
-        pthread_create(&t_ptr[i].thread_id, NULL, &thread_schedule, (void *)i);
-    }
-    else if (i == 2){
-        threadpool=thpool_init(THREADNUM); /* initialise it to  number of threads */
-        //pthread_create(&t_ptr[i].thread_id, NULL, &thread_exec, (void *)i);
-    }
-    /* main thread returns */
-}
 
 //this method will intialize the thread pool
 thpool_t* thpool_init(int threadNum){
@@ -545,8 +482,6 @@ thpool_t* thpool_init(int threadNum){
 
     if(thpool_jobqueue_init(pool_ptr))
         perror("Init jobqueue error exit...");
-    pool_ptr->jobqueue->queueSem = (sem_t*)malloc(sizeof(sem_t));
-    sem_init(pool_ptr->jobqueue->queueSem,0,1);
 
     for (int t=0; t<threadNum; t++){
         fprintf(stderr,"Created thread %d in pool \n", t);
@@ -557,71 +492,6 @@ thpool_t* thpool_init(int threadNum){
 
 }
 
-// elimate a thread pool
-void thpool_die(thpool_t* thread_p)
-{
-    int i;
-    thpool_live = 0;
-    for(i = 0; i < (thread_p -> thread_count); i++)
-    {
-        if(sem_post(thread_p -> jobqueue -> queueSem))
-        {
-            fprintf(stderr,"cannot destory thpool destory\n");
-        }
-    }
-    if(sem_post(thread_p -> jobqueue -> queueSem) != 0)
-    {
-        fprintf(stderr,"cannot destory semaphore \n");
-    }
-    for(i = 0; i < (thread_p -> thread_count); i++)
-    {
-        pthread_join(thread_p -> thread_id[i],NULL);
-    }
-    thpool_jobqueue_clean(thread_p);
-
-    //free(thread_p -> thread_count);
-    free(thread_p -> jobqueue-> queueSem);
-    free(thread_p -> jobqueue);
-    free(thread_p);
-}
-
-// clean a jobqueue
-
-int thpool_jobqueue_clean(thpool_t* thread_p)
-{
-    // Point pinter to the end of it's job queue
-    thpool_job_t* current_job;
-    current_job = thread_p -> jobqueue -> tail;
-
-    while(thread_p -> jobqueue -> jobN)
-    {
-        thread_p -> jobqueue -> tail = current_job -> prev;
-        free(current_job);
-        current_job = thread_p -> jobqueue -> tail;
-        thread_p -> jobqueue -> jobN = thread_p -> jobqueue -> jobN - 1;
-
-    }
-    thread_p -> jobqueue -> head = NULL;
-    thread_p -> jobqueue -> tail = NULL;
-
-    return 0;
-
-}
-
-// switch firstjob to be the secjob
-// tail firstjob secjob head |-> tail secjob firstjob head
-int thpool_jobqueue_switch(thpool_job_t firstjob, thpool_job_t secjob)
-{
-    thpool_job_t* store1;
-    thpool_job_t* store2;
-    store1 = firstjob.prev;
-    store2 = firstjob.next;
-    firstjob.prev = secjob.prev;
-    firstjob.next = store1;
-    secjob.prev = secjob.next;
-    secjob.next = store2;
-    return 0;
-}
 
 /* Initialise queue */
 int thpool_jobqueue_init(thpool_t* thread_p){
@@ -630,7 +500,6 @@ int thpool_jobqueue_init(thpool_t* thread_p){
     thread_p -> jobqueue -> head = NULL;
     thread_p -> jobqueue -> jobN = 0;
     thread_p -> jobqueue -> tail = NULL;
-
     return 0;
 }
 
@@ -794,7 +663,6 @@ int show_job_queue(thpool_t* thread_p)
 }
 
 
-
 void do_sjf(thpool_t* thread_p)
 {
     int jobNum = threadpool->jobqueue->jobN;
@@ -835,7 +703,6 @@ void do_sjf(thpool_t* thread_p)
 
 void *thread_schedule(){
     sleep(TIME);
-    //sleep(25);
     while(true){
         pthread_mutex_lock(&client_enter_cond);
         while(threadpool->jobqueue->jobN == 0){
@@ -870,9 +737,6 @@ void thread_exec(thpool_t* thread_p){
         socketid = job->socket_client_ID;
         request = job->request;
         thpool_jobqueue_removelast(threadpool);
-       // fpin = fdopen(socketid,"r");
-       // fgets(request,BUFSIZ,fpin);
-       // find_crnl(fpin);
         process_request(request, socketid);
         request_queuing_time=get_time(); //call this function from queuing thread
         request_scheduling_time=get_time();//call this function from scheduling thread

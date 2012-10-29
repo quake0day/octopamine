@@ -76,7 +76,7 @@ void logging(char *log_file, char *ip_addr, char *request_queuing_time, char *re
     req = strtok(req,"\r");
 
 
-    if(DEBUG_MODE==0)
+    if(DEBUG_MODE==1)
     {
         (void)printf("%s - [%s] [%s] \"%s\" %d %ld\n",ip_addr,t,tt,req,status,size);
     }
