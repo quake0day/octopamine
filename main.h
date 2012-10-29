@@ -53,6 +53,7 @@ pthread_mutex_t client_pro_cond;
 pthread_mutex_t client_enter_cond;
 pthread_mutex_t clientId_req_mutex;
 pthread_cond_t clientId_req_cond;
+pthread_cond_t  clientId_sche;
 
 typedef enum __bool { false = 0, true = 1, } bool;
 
@@ -62,6 +63,8 @@ typedef struct thpool_job_t{
     FUNC 			 function;
     void*                   arg;     //function parameter
     int 			 socket_client_ID;
+    long   filesize;
+    char* request;
     struct thpool_job_t* prev;     // aim to the previous node
     struct thpool_job_t* next;	    // aim to the next node
 } thpool_job_t;

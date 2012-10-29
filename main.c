@@ -48,10 +48,14 @@ pthread_mutex_t client_enter_cond = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t clientId_req_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t  clientId_req_cond = PTHREAD_COND_INITIALIZER;
 pthread_cond_t  clientId_cond = PTHREAD_COND_INITIALIZER;
-
+pthread_cond_t  clientId_sche = PTHREAD_COND_INITIALIZER;
 char timebuf[1000];
 
 char *LOGGING_PATH = NULL;
+
+
+//char request[BUFSIZ];
+
 
 //method for getting current time
 char* get_time()
@@ -111,13 +115,16 @@ int main(int argc, char **argv)
                 break;
             case 't':
                 TIME_R = optarg;
+                TIME = atoi(TIME_R);
                 break;
             case 'n':
                 THREADNUM_R = optarg;
+                THREADNUM = atoi(THREADNUM_R);
                 break;
             case 's':
                 printf(" enter 0 for FCFS and 1 for SJF");
                 SCHED_R = optarg;
+              //  SCHED = atoi(SCHED_R);
                 break;
             case '?':
                 if(optopt == 'l')
@@ -574,6 +581,21 @@ int thpool_jobqueue_clean(thpool_t* thread_p)
 
 }
 
+// switch firstjob to be the secjob
+// tail firstjob secjob head |-> tail secjob firstjob head
+int thpool_jobqueue_switch(thpool_job_t firstjob, thpool_job_t secjob)
+{
+    thpool_job_t* store1;
+    thpool_job_t* store2;
+    store1 = firstjob.prev;
+    store2 = firstjob.next;
+    firstjob.prev = secjob.prev;
+    firstjob.next = store1;
+    secjob.prev = secjob.next;
+    secjob.next = store2;
+    return 0;
+}
+
 /* Initialise queue */
 int thpool_jobqueue_init(thpool_t* thread_p){
     thread_p->jobqueue = (thpool_job_queue*)malloc(sizeof(thpool_job_queue));
@@ -645,16 +667,43 @@ int thpool_jobqueue_addone(thpool_t* thread_p, thpool_job_t* newjob)
 
 }
 
+int thpool_jobqueue_addone_to_tail(thpool_t* thread_p, thpool_job_t* newjob)
+{
+    // init
+    newjob -> next = NULL;
+    newjob -> prev = NULL;
+    
+    thpool_job_t* oldOne;
+    
+    oldOne = thread_p -> jobqueue -> tail;
+    
+    if(thread_p -> jobqueue -> jobN == 0) // if it is an empty list
+    {
+        thread_p -> jobqueue -> head = newjob;
+        thread_p -> jobqueue -> tail = newjob;
+    }
+    else
+    {
+        newjob -> prev = oldOne;
+        oldOne -> next = newjob;
+        thread_p -> jobqueue -> tail = newjob;
+        
+    }
+    thread_p -> jobqueue -> jobN = thread_p -> jobqueue -> jobN + 1;
+    
+    return 0;
+    
+}
+
 //int thpool_pool_addone(thpool_t* thread_p, void*)
 void *thread_listen(){
     //this method(thread) will listen for the incoming requests and put them in a queue
+
     while(true){
-
-        fprintf(stderr,"I'm in listener now");
-
         thpool_job_t* newjob;
         newjob = (thpool_job_t*) malloc(sizeof(thpool_job_t));
         if(newjob == NULL)
+       
         {
             fprintf(stderr,"In listen, cannot allocate memory for new job\n");
         }
@@ -665,13 +714,45 @@ void *thread_listen(){
         {
             exit(1);
         }
-        newjob -> socket_client_ID = socket_client_id;
+        newjob->socket_client_ID = socket_client_id;
+        char request[BUFSIZ];
+        FILE *fpin;
+        fpin = fdopen(socket_client_id,"r");
+        fgets(request,BUFSIZ,fpin);
+        find_crnl(fpin);
+        char arg_f[BUFSIZ];
+        char cmd[BUFSIZ];
+        long size=0;
+        strcpy(arg_f,"./");  //process arguments starts with ./
+        //sscanf(request, "%s %s",cmd, arg_f +2);
+        sscanf(request,"%s",cmd);
+        sscanf(request,"%*[^/]/%[^ ]",arg_f);
+        if(strcmp(cmd,"GET") ==0){ // if it is a Get request
+        struct stat info;
+        if(stat(arg_f,&info) != -1){
+                size= info.st_size;
+            }
+            else{
+                size = 0;
+            }
+        if(size >= 72340172838076672){
+            size = 0;
+        }
+        }
+        else if(strcmp(cmd,"HEAD") == 0)
+        {
+            size = 0;
+        }
+#ifdef DEBUG
+        fprintf(stderr,"%s %s %ld\n",cmd,arg_f,size);
+#endif
+
+        newjob->filesize = size;
+        newjob->request = request;
         pthread_mutex_lock(&clientId_mutex);
         thpool_jobqueue_addone(threadpool,newjob);
-        pthread_cond_signal(&clientId_req_cond);
-        // pthread_cond_wait(&client_pro_cond,&clientId_req_mutex);
+        pthread_cond_signal(&clientId_sche);
         pthread_mutex_unlock(&clientId_mutex);
-        show_job_queue(threadpool);
     }
 }
 
@@ -684,83 +765,69 @@ int show_job_queue(thpool_t* thread_p)
 }
 
 
+
+void do_sjf(thpool_t* thread_p)
+{
+    int jobNum = threadpool->jobqueue->jobN;
+    if(jobNum > 1) // more than 1 jobs in queue
+    {
+        thpool_job_t* firstjob;
+        thpool_job_t* secjob;
+        thpool_job_t* targetjob=thread_p->jobqueue->tail;
+        firstjob = thread_p->jobqueue->tail;
+        secjob = thread_p->jobqueue->tail->prev;
+        for(int k = jobNum-1; k > 0 ; k--){
+   if(firstjob->filesize > secjob->filesize)
+   {
+       targetjob = secjob;
+       firstjob = secjob;
+       secjob = secjob->prev;
+   }
+   else{
+       firstjob = secjob;
+       secjob = secjob->prev;
+       
+   }
+        }
+        if(targetjob != thread_p->jobqueue->tail && targetjob != thread_p->jobqueue->head)
+        {
+            targetjob->next->prev = targetjob->prev;
+            targetjob->prev->next = targetjob->next;
+            thpool_jobqueue_addone_to_tail(thread_p,targetjob);
+        }
+        else if(targetjob == thread_p->jobqueue->head)
+        {
+            targetjob->next->prev = thread_p->jobqueue->head;
+            thread_p->jobqueue->head = targetjob->next;
+            thpool_jobqueue_addone_to_tail(thread_p,targetjob); 
+        }
+    }
+}
+
 void *thread_schedule(){
-    /*
-       while(true){
-
-       thpool_job_t* job_p;
-       int jobNum;
-       pthread_mutex_lock(&clientId_mutex);
-
-       if(threadpool->jobqueue->tail != threadpool->jobqueue->head){
-       job_p = thpool_jobqueue_peek(threadpool);
-    //fprintf(stderr, "%d",job_p->socket_client_ID);
-    }
-    else{
-    pthread_cond_wait(&clientId_cond, &clientId_mutex);
-    }
-    // job_p = thpool_jobqueue_peek(threadpool);
-
-    pthread_mutex_unlock(&clientId_mutex);
-
-
-    pthread_mutex_lock(&clientId_req_mutex);
-
-    pthread_mutex_unlock(&clientId_req_mutex);
-
-
-    //this method(thread) will pick the requests from the ready queue and schedule them according to policies
-    //sleep(TIME);
-
-    }
-    // sleep(TIME);
-
-
+    sleep(TIME);
+    //sleep(25);
     while(true){
-    pthread_cond_signal(&clientId_req_cond); //signal one of the execution threads
-    fprintf(stderr,"I'm in scheduler now");
-
-    pthread_mutex_lock(&clientId_mutex);
-
-    while(ihead==itail){
-    //   fprintf(stderr,"hello baby\n");
-    pthread_cond_wait(&clientId_cond, &clientId_mutex);
+        pthread_mutex_lock(&clientId_mutex);
+        while(threadpool->jobqueue->jobN == 0){
+            pthread_cond_wait(&clientId_sche,&clientId_mutex);
+        }
+        if(SCHED==0){  //FCFS
+        pthread_cond_signal(&clientId_req_cond);
+        }
+        else if(SCHED ==1){ //SJF
+            do_sjf(threadpool);
+            pthread_cond_signal(&clientId_req_cond);
+        }
+        pthread_mutex_unlock(&clientId_mutex);
+        //show_job_queue(threadpool);
     }
-    while(ihead!=itail){
-    if(SCHED==1){
-    // int value= sjf(clientId[ihead]);
-    ihead=ihead+1;
-    }
-    else{
-    // int value= fcfs(clientId[ihead]);
-    ihead=ihead+1;
-    }
-    if( ihead==MAXCLIENT){
-    ihead=0;
-    }
-    }
-
-
-    pthread_mutex_unlock(&clientId_mutex);
-    pthread_mutex_lock(&clientId_req_mutex);
-    while(iput_req == iget_req)
-    pthread_cond_wait(&clientId_req_cond,&clientId_req_mutex);
-
-    pthread_cond_signal(&clientId_req_cond); //signal one of the execution threads
-
-    pthread_mutex_unlock(&clientId_req_mutex);
-    }
-
-*/
-
     return 0;
-
 }
 
 void thread_exec(thpool_t* thread_p){
     while (true) {
-        FILE *fpin;
-        char request[BUFSIZ];
+         char* request=NULL;
         int socketid;
         thpool_job_t* job;
 
@@ -769,12 +836,14 @@ void thread_exec(thpool_t* thread_p){
             pthread_cond_wait(&clientId_req_cond,&client_enter_cond);
         }
 
+        //FCFS && also SJF
         job = thpool_jobqueue_peek(thread_p);
         socketid = job->socket_client_ID;
+        request = job->request;
         thpool_jobqueue_removelast(threadpool);
-        fpin = fdopen(socketid,"r");
-        fgets(request,BUFSIZ,fpin);
-        find_crnl(fpin);
+       // fpin = fdopen(socketid,"r");
+       // fgets(request,BUFSIZ,fpin);
+       // find_crnl(fpin);
         process_request(request, socketid);
         request_queuing_time=get_time(); //call this function from queuing thread
         request_scheduling_time=get_time();//call this function from scheduling thread
@@ -786,7 +855,7 @@ void thread_exec(thpool_t* thread_p){
 
         }
         close(socketid);
-        fclose(fpin);
+       // fclose(fpin);
 #ifdef DEBUG
         printf("got one! request = %s",request);
 #endif

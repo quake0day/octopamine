@@ -33,7 +33,7 @@ void logging(char *log_file, char *ip_addr, char *request_queuing_time, char *re
     sscanf(req,"%*[^/]/%[^ ]",arg_f);
     // FILE *arg_file = fopen(arg_f,"r");
     struct stat info;
-    stat(arg_f,&info);
+   // stat(arg_f,&info);
     //   int filesize;
 
     //   char *a=NULL;
@@ -41,8 +41,32 @@ void logging(char *log_file, char *ip_addr, char *request_queuing_time, char *re
     char *tt=NULL;
     int status;
     //char *size=NULL;
-    long size;
-
+    long size=0;
+    if(stat(arg_f,&info) != -1){ // if file exists
+        size= info.st_size;
+        if(size >= 72340172838076672){
+            status = 404;
+            size = 0;
+        }
+    }
+    else{
+        size = 0;
+    }
+    
+    if (strcmp(cmd,"GET")==0)
+    {
+        status=200;
+    }
+    else if(strcmp(cmd,"HEAD") == 0)
+    {
+        status=400;
+        size = 0 ;
+    }
+    else
+    {
+        status=404;
+        size = 0 ;
+    }
     t= request_queuing_time;
     t = strtok(t, "\n");
 
@@ -51,22 +75,7 @@ void logging(char *log_file, char *ip_addr, char *request_queuing_time, char *re
     // delete \n from req
     req = strtok(req,"\r");
 
-    if (strcmp(cmd,"GET")==0)
-    {
 
-        status=200;
-        size= info.st_size;
-        if(size >= 72340172838076672){
-            status = 404;
-            size = 0;
-        }
-
-    }
-    else
-    {
-        status=404;
-        size = 0 ;
-    }
     if(DEBUG_MODE==0)
     {
         (void)printf("%s - [%s] [%s] \"%s\" %d %ld\n",ip_addr,t,tt,req,status,size);
