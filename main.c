@@ -272,7 +272,7 @@ void process_request(char *rq, int fd)
     //   if(fork() != 0)
     //     return;
 
-    strcpy(arg_f,"./");  //process arguments starts with ./
+    strcpy(arg_f,"./");  //process arguments starts with 
     if(sscanf(rq, "%s %s",cmd, arg_f +2) != 2)
         return;
     if(sscanf(rq,"%s",cmd)!= 0 && sscanf(rq,"%*[^/]/%[^ ]",arg_f)!= 0)
@@ -424,18 +424,45 @@ printf("This file type is %d\n",file_type);
 // By Suqiang Chen
 // Modified by Si CHen
 
+
 int show_dir(char *dir, int fd)
-{
-    FILE *fp = fdopen(fd,"w");
-    DIR* dp;
-    struct dirent *dirp;
-    dp=opendir(dir);
-    while ((dirp=readdir(dp))!=NULL)
-        fprintf(fp,"%s\n ",dirp->d_name);
-    closedir(dp);
-    fclose(fp);
-    return 0;
-}
+    {
+        char *str=NULL;
+        dup2(fd,2);
+        FILE *fp = fdopen(fd,"w");
+        FILE *fpp = fdopen(2,"w");
+        DIR* dp;
+        struct dirent *dirp;
+        dp=opendir(dir);
+        while ((dirp=readdir(dp))!=NULL)
+        {
+            str=dirp->d_name;
+            if(strcmp(str,"index.html") == 0)
+            {
+                FILE *arg_file = fopen("index.html","r");
+                int c;
+                if(fp!=NULL && arg_file!=NULL)
+                {
+                    while((c=getc(arg_file))!=EOF)
+                    {
+                        putc(c,fp);
+                    }
+                }
+                fclose(arg_file);
+                fclose(fp);
+                close(2);  //for it!!! --
+                break;
+            }
+            if(*str!='.')
+            {
+                fputs(strcat(str,"\n"),fpp);
+            }
+        }
+        closedir(dp);
+        fclose(fpp);
+        return 0;
+    }
+
 
 void get_file(int fd,char *f,FILE* socket)
 {
@@ -689,7 +716,7 @@ int thpool_jobqueue_addone_to_tail(thpool_t* thread_p, thpool_job_t* newjob)
         thread_p -> jobqueue -> tail = newjob;
         
     }
-    thread_p -> jobqueue -> jobN = thread_p -> jobqueue -> jobN + 1;
+   // thread_p -> jobqueue -> jobN = thread_p -> jobqueue -> jobN + 1;
     
     return 0;
     
@@ -698,6 +725,9 @@ int thpool_jobqueue_addone_to_tail(thpool_t* thread_p, thpool_job_t* newjob)
 //int thpool_pool_addone(thpool_t* thread_p, void*)
 void *thread_listen(){
     //this method(thread) will listen for the incoming requests and put them in a queue
+    char request[BUFSIZ]="AAA";
+    FILE *fpin;
+    char *d;
 
     while(true){
         thpool_job_t* newjob;
@@ -715,8 +745,6 @@ void *thread_listen(){
             exit(1);
         }
         newjob->socket_client_ID = socket_client_id;
-        char request[BUFSIZ];
-        FILE *fpin;
         fpin = fdopen(socket_client_id,"r");
         fgets(request,BUFSIZ,fpin);
         find_crnl(fpin);
@@ -724,7 +752,7 @@ void *thread_listen(){
         char cmd[BUFSIZ];
         long size=0;
         strcpy(arg_f,"./");  //process arguments starts with ./
-        //sscanf(request, "%s %s",cmd, arg_f +2);
+        sscanf(request, "%s %s",cmd, arg_f +2);
         sscanf(request,"%s",cmd);
         sscanf(request,"%*[^/]/%[^ ]",arg_f);
         if(strcmp(cmd,"GET") ==0){ // if it is a Get request
@@ -748,7 +776,8 @@ void *thread_listen(){
 #endif
 
         newjob->filesize = size;
-        newjob->request = request;
+        d=strdup(request);
+        newjob->request = d;
         pthread_mutex_lock(&clientId_mutex);
         thpool_jobqueue_addone(threadpool,newjob);
         pthread_cond_signal(&clientId_sche);
@@ -808,18 +837,18 @@ void *thread_schedule(){
     sleep(TIME);
     //sleep(25);
     while(true){
-        pthread_mutex_lock(&clientId_mutex);
+        pthread_mutex_lock(&client_enter_cond);
         while(threadpool->jobqueue->jobN == 0){
             pthread_cond_wait(&clientId_sche,&clientId_mutex);
         }
-        if(SCHED==0){  //FCFS
+        if(SCHED==1){  //FCFS
         pthread_cond_signal(&clientId_req_cond);
         }
-        else if(SCHED ==1){ //SJF
+        else if(SCHED ==0){ //SJF
             do_sjf(threadpool);
             pthread_cond_signal(&clientId_req_cond);
         }
-        pthread_mutex_unlock(&clientId_mutex);
+        pthread_mutex_unlock(&client_enter_cond);
         //show_job_queue(threadpool);
     }
     return 0;
@@ -854,6 +883,7 @@ void thread_exec(thpool_t* thread_p){
             logging(LOGGING_PATH,client_addr,request_queuing_time,request_scheduling_time,request);
 
         }
+        free(job->request);
         close(socketid);
        // fclose(fpin);
 #ifdef DEBUG
