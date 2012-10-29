@@ -79,7 +79,7 @@ int main(int argc, char **argv)
     char *DIR_R = NULL;
     char *TIME_R = NULL;
     char *PORT_R = NULL;
-    char *LOGGING_PATH = NULL;
+    //char *LOGGING_PATH = NULL;
     char *THREADNUM_R = NULL;
     char *SCHED_R =NULL;
 
@@ -262,8 +262,8 @@ void process_request(char *rq, int fd)
     int filetype;
     //fork a new process to dealing this....
     // NEED change!
- //   if(fork() != 0)
-   //     return;
+    //   if(fork() != 0)
+    //     return;
 
     strcpy(arg_f,"./");  //process arguments starts with ./
     if(sscanf(rq, "%s %s",cmd, arg_f +2) != 2)
@@ -434,7 +434,7 @@ void get_file(int fd,char *f,FILE* socket)
 {
     FILE *arg_file;
     int c;
-   // fp=fdopen(fd,"w");
+    // fp=fdopen(fd,"w");
     arg_file=fopen(f,"r");
     if(socket!=NULL && arg_file!=NULL)
     {
@@ -444,9 +444,9 @@ void get_file(int fd,char *f,FILE* socket)
             putc(c,socket);
         }
         fclose(arg_file);
-      //  fclose(fp);
+        //  fclose(fp);
     }
-   // exit(0);
+    // exit(0);
 }
 
 
@@ -545,7 +545,7 @@ void thpool_die(thpool_t* thread_p)
     }
     thpool_jobqueue_clean(thread_p);
 
-    free(thread_p -> thread_count);
+    //free(thread_p -> thread_count);
     free(thread_p -> jobqueue-> queueSem);
     free(thread_p -> jobqueue);
     free(thread_p);
@@ -610,11 +610,9 @@ int thpool_jobqueue_removelast(thpool_t* thread_p)
         default:
             lastjob->prev->next = NULL;
             thread_p->jobqueue->tail = lastjob->prev;
-        
+
     }
     (thread_p->jobqueue->jobN)--;
-    int reval;
-    sem_getvalue(thread_p->jobqueue->queueSem, &reval);
     return 0;
 }
 
@@ -642,10 +640,6 @@ int thpool_jobqueue_addone(thpool_t* thread_p, thpool_job_t* newjob)
 
     }
     thread_p -> jobqueue -> jobN = thread_p -> jobqueue -> jobN + 1;
-    sem_post(thread_p -> jobqueue -> queueSem);
-
-    int reval;
-    sem_getvalue(thread_p -> jobqueue -> queueSem, &reval);
 
     return 0;
 
@@ -721,7 +715,7 @@ void *thread_schedule(){
     }
     // sleep(TIME);
 
-    
+
     while(true){
     pthread_cond_signal(&clientId_req_cond); //signal one of the execution threads
     fprintf(stderr,"I'm in scheduler now");
@@ -764,65 +758,26 @@ void *thread_schedule(){
 }
 
 void thread_exec(thpool_t* thread_p){
-
-
-
-
-
-
-
-    //these are the threads which will execute different requests
-
-
-
-    /*
-       while(iput_req == iget_req)
-       {
-       pthread_cond_wait(&clientId_req_cond,&clientId_req_mutex);
-       }
-       fprintf(stderr,"I'm in exec\n");
-
-       int socketid=client_schedule[iget_req]; //get request from scheduling queue
-       fpin = fdopen(socketid,"r");
-    // read request
-    fgets(request,BUFSIZ,fpin);
-#ifdef DEBUG
-printf("got one! request = %s",request);
-#endif
-find_crnl(fpin);
-process_request(request,socketid);
-close(socketid);
-fclose(fpin);
-
-    //do request part
-    //coding needs to be done for request part
-
-*/
     while (true) {
-
-
         FILE *fpin;
         char request[BUFSIZ];
         int socketid;
         thpool_job_t* job;
 
         pthread_mutex_lock(&client_enter_cond);
-        while(thread_p->jobqueue->tail == thread_p->jobqueue->head){
+        while(thread_p->jobqueue->jobN == 0){
             pthread_cond_wait(&clientId_req_cond,&client_enter_cond);
         }
 
-            job = thpool_jobqueue_peek(thread_p);
-        socketid = job->prev->socket_client_ID;
-        
-        
-            thpool_jobqueue_removelast(threadpool);
-            fpin = fdopen(socketid,"r");
-            fgets(request,BUFSIZ,fpin);
-            find_crnl(fpin);
-            process_request(request, socketid);
+        job = thpool_jobqueue_peek(thread_p);
+        socketid = job->socket_client_ID;
+        thpool_jobqueue_removelast(threadpool);
+        fpin = fdopen(socketid,"r");
+        fgets(request,BUFSIZ,fpin);
+        find_crnl(fpin);
+        process_request(request, socketid);
         request_queuing_time=get_time(); //call this function from queuing thread
         request_scheduling_time=get_time();//call this function from scheduling thread
-        
         if(LOGGING){
 #ifdef DEBUG
             fprintf(stderr," I am going into logging\n");
@@ -830,29 +785,13 @@ fclose(fpin);
             logging(LOGGING_PATH,client_addr,request_queuing_time,request_scheduling_time,request);
 
         }
-        //divya's part end here
-            close(socketid);
-            fclose(fpin);
+        close(socketid);
+        fclose(fpin);
 #ifdef DEBUG
-            printf("got one! request = %s",request);
+        printf("got one! request = %s",request);
 #endif
-            // fprintf(stderr,"%s",request);
-
-
-            
-            // pthread_cond_signal(&client_pro_cond);
-
-
-        //     }
-
-        //fprintf(stderr,"%u tid",tid);
-
-        //fprintf(stderr,"Say HIHO!\n");
         pthread_cond_broadcast(&clientId_req_cond);
         pthread_mutex_unlock(&client_enter_cond);
-
-
-
 }
 
 }
