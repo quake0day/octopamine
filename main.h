@@ -90,6 +90,7 @@ typedef struct Thread{
 } Thread;
 
 void process_request(char *rq, int fd);
+char* special_folder(char *f);
 int request_arg_judge(char *f);
 int request_file_type(char *f);
 void provide_header(int file_type,char *f,FILE *socket);
@@ -99,6 +100,7 @@ int show_404(char *arg, int fd);
 int show_dir(char *dir, int fd);
 int thpool_jobqueue_clean(thpool_t* thread_p);
 int show_job_queue(thpool_t* thread_p);
+int get_cmd_ret(char *cmd,char *buf,int len);
 
 
 void get_file(int fd,char *f,FILE* socket);

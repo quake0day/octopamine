@@ -18,6 +18,8 @@ int PORT = 8080; // httpd listening port, default is 8080
 int TIME = 60; // queuing time(s), default is 60(s)
 int THREADNUM = 5; // Number of threads in thread pool
 int SCHED = 0; // scheduling policy FCFS=0 SJF=1, default is FCFS
+char *DIR_R = "./"; //root dir, default is ./
+
 
 int client_schedule[MAXCLIENT];
 int iput_req,iget_req;
@@ -54,9 +56,6 @@ char timebuf[1000];
 char *LOGGING_PATH = NULL;
 
 
-//char request[BUFSIZ];
-
-
 //method for getting current time
 char* get_time()
 {
@@ -74,11 +73,6 @@ int main(int argc, char **argv)
 {
     struct sockaddr_in sockaddr; /* incoming address */
 
-    //int socket_client_id; /* define socket id */
-
-
-    // NEED CHANGE
-    char *DIR_R = NULL;
     char *TIME_R = NULL;
     char *PORT_R = NULL;
     //char *LOGGING_PATH = NULL;
@@ -118,14 +112,16 @@ int main(int argc, char **argv)
                 THREADNUM = atoi(THREADNUM_R);
                 break;
             case 's':
-                printf(" enter 0 for FCFS and 1 for SJF");
+                //printf(" enter 0 for FCFS and 1 for SJF");
                 SCHED_R = optarg;
                 char *str1="sjf";
-                if(strcmp(SCHED_R,str1)==0)
+                char *str2="SJF";
+                char *str3="Sjf";
+                if(strcmp(SCHED_R,str1)==0 || strcmp(SCHED_R,str2)==0 || strcmp(SCHED_R,str3)==0)
                 {
                     SCHED=1;
                 }
-              //  SCHED = atoi(SCHED_R);
+                //  SCHED = atoi(SCHED_R);
                 break;
             case '?':
                 if(optopt == 'l')
@@ -138,7 +134,7 @@ int main(int argc, char **argv)
 
         }
     }
-    
+
 #ifdef DEBUG
     printf("FOR TEST::::DIR: %s \n",DIR_R);
     printf("FOR TEST::::TIME: %s \n",TIME_R);
@@ -158,7 +154,7 @@ int main(int argc, char **argv)
         printf("[-r dir] [-t time] [-n threadnum] [-s sched]\n");
         return 0;
     }
-    
+
     // daemonize this program
     if(DEBUG_MODE == 0){
         pid_t p;
@@ -174,24 +170,31 @@ int main(int argc, char **argv)
         // return 0;
     }
 
-    
+
     //DEBUG_MODE=1;
 
     //initial socket here
     socket_id = socket(PF_INET,SOCK_STREAM,0); /*initial*/
     if(socket_id == -1) /* handle exceptions */
+    {
+        perror("Cannot listen to certain port, try to change a port with -p .");
         return -1;
-    
+    }
+
     //NEED CHANGE !!
     sockaddr.sin_port = htons(PORT); /* socket port */
     sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     sockaddr.sin_family = AF_INET; /* addr family */
-    if ( bind(socket_id,(struct sockaddr *) &sockaddr, sizeof(sockaddr)) != 0 ) // bind socket to cetrain addr
+    if ( bind(socket_id,(struct sockaddr *) &sockaddr, sizeof(sockaddr)) != 0 ){ // bind socket to cetrain addr
+        perror("Cannot listen to certain port, try to change a port with -p .");
         return -1;
+    }
 
     /* listen for incomming calls */
-    if(listen(socket_id,1) != 0)
+    if(listen(socket_id,1) != 0){
+        perror("Cannot listen to certain port, try to change a port with -p .");
         return -1;
+    }
 
     //multithreading
     threadpool=thpool_init(THREADNUM);
@@ -205,7 +208,7 @@ int main(int argc, char **argv)
     pthread_join(*plisten,NULL);
     return 0; // the end... die!!!!!!!!
 
-    }
+}
 
 
 /* skip over all request only concerned on CRNL */
@@ -215,6 +218,7 @@ int find_crnl(FILE *fp)
     while(fgets(buf,BUFSIZ,fp) != NULL && strcmp(buf,"\r\n") !=0 );
     return 0;
 }
+
 
 /* handle the request
  ** Do as the request asks for
@@ -232,6 +236,10 @@ void process_request(char *rq, int fd)
     strcpy(arg_f,"./");  //process arguments starts with
     if(sscanf(rq, "%s %s",cmd, arg_f +2) != 2)
         return;
+    if(strcmp(arg_f,".//")==0){
+        char* rq = "GET /index.html HTTP/1.1\r\n";
+        process_request(rq, fd);
+    }
     if(sscanf(rq,"%s",cmd)!= 0 && sscanf(rq,"%*[^/]/%[^ ]",arg_f)!= 0)
     {
         if(strcmp(cmd,"GET") == 0)
@@ -274,15 +282,10 @@ void process_request(char *rq, int fd)
 #endif
             provide_header(filetype,arg_f,fp);
         }
-        else if(strcmp(cmd,"~") == 0)
-        {
-            char buf[50];
-            getcwd(buf, sizeof(buf));
-            fprintf(fp,"%s\n", buf);
-        }
         else
             fprintf(fp,"request wrong!");
     }
+
     fclose(fp);
 }
 
@@ -294,7 +297,10 @@ int request_arg_judge(char *f)
      * 1 for directory (means it is a folder)
      * 2 for non (means found nothing..)
      */
+
     int req_type = 0;
+
+    
     // judge if it is a directory
     if(stat(f,&info) != -1 && S_ISDIR(info.st_mode))
         req_type = 1;
@@ -303,6 +309,7 @@ int request_arg_judge(char *f)
         req_type = 2;
     return req_type;
 }
+
 int request_file_type(char *f)
 {
     char *cp;
@@ -327,6 +334,7 @@ int show_404(char *arg, int fd)
     fprintf(fp,"HTTP/1.0 404 Not Found\r\n");
     fprintf(fp,"Content-type:text/plain\r\n");
     fprintf(fp,"\r\n");
+    fprintf(fp,"You are in our 404 page :( \r\n");
     fprintf(fp,"This file: %s\r\nis not found on our server\r\n",arg);
     fclose(fp);
     return 0;
@@ -380,46 +388,107 @@ printf("This file type is %d\n",file_type);
 // basic system & file info provide part
 // By Suqiang Chen
 // Modified by Si CHen
-
-
-int show_dir(char *dir, int fd)
-{
-        char *str=NULL;
-        dup2(fd,2);
-        FILE *fp = fdopen(fd,"w");
-        FILE *fpp = fdopen(2,"w");
-        DIR* dp;
-        struct dirent *dirp;
-        dp=opendir(dir);
-        while ((dirp=readdir(dp))!=NULL)
+char* special_folder(char *f){
+    char *temp;
+    FILE *fp;
+    temp = strtok(f, "~");
+    char *pwd=NULL;
+    char cmd[100];
+    if(strcmp(temp,f)!= 0){ // if there is a ~ in the request
+        sprintf(cmd, "pwd");
+        if ((fp = popen(cmd, "r")) != NULL)
         {
-            str=dirp->d_name;
-            if(strcmp(str,"index.html") == 0)
-            {
-                FILE *arg_file = fopen("index.html","r");
-                int c;
-                if(fp!=NULL && arg_file!=NULL)
-                {
-                    while((c=getc(arg_file))!=EOF)
-                    {
-                        putc(c,fp);
-                    }
-                }
-                fclose(arg_file);
-                fclose(fp);
-                close(2);  //for it!!! --
-                break;
-            }
-            if(*str!='.')
-            {
-                fputs(strcat(str,"\n"),fpp);
-            }
+            fgets(cmd, sizeof(cmd), fp);
+            pclose(fp);
         }
-        closedir(dp);
-        fclose(fpp);
-        return 0;
+        // printf("cmd is %s\n", cmd);
+        pwd = strcat(cmd,"/");
+        f = strcat(cmd,temp);
+#ifdef DEBUG
+        fprintf(stderr,"PWDPWD:%s\n\n",f);
+#endif
+    }
+    return f;
 }
 
+long get_file_size(char *request)
+{
+    long file_size=0;
+    request = special_folder(request);
+    if(request_arg_judge(request) == 0)
+    {
+        struct stat info;
+        stat(request,&info);
+        file_size = info.st_size;
+    }
+    return file_size;
+}
+int show_dir(char *dir, int fd)
+{
+    char *str=NULL;
+    char *filepath="./";
+    dup2(fd,2);
+    FILE *fp = fdopen(fd,"w");
+    FILE *fpp = fdopen(2,"w");
+    DIR* dp;
+    struct dirent *dirp;
+    dp=opendir(dir);
+    while ((dirp=readdir(dp))!=NULL)
+    {
+        str=dirp->d_name;
+        if(strcmp(str,"index.html") == 0)
+        {
+          //  filepath = strcat(filepath,dir);
+            filepath = strcat(dir,"index.html");
+#ifdef DEBUG
+            //fprintf(stderr, "FILE PATH:%s\n",filepath);
+#endif
+            FILE *arg_file = fopen(filepath,"r");
+            int c;
+            if(fp!=NULL && arg_file!=NULL)
+            {
+                while((c=getc(arg_file))!=EOF)
+                {
+                    putc(c,fp);
+                }
+            }
+            fclose(arg_file);
+            fclose(fp);
+            close(2);  //for it!!! --
+            return 0;
+        }
+    
+    }
+    char* cmd_i = "ls";
+    char* cmd[9999];
+    sprintf(cmd,"%s %s",cmd_i,dir);
+    char ls[1024];
+    get_cmd_ret(cmd, ls, 1022);
+   // fwrite(ls,1,sizeof(ls),fpp);
+    fprintf(fpp,"%s",ls);
+
+    //printf("HERE:%c",ls[15]);
+    closedir(dp);
+    fclose(fpp);
+    return 0;
+}
+
+int get_cmd_ret(char *cmd,char *buf,int len)
+{
+    if(!cmd || !strlen(cmd))
+        return -1;
+    if(len <= 0)
+        return -1;
+    FILE   *stream;
+    memset( buf, 0,len);
+
+    stream = popen(cmd, "r" );
+    fread( buf, sizeof(char),len, stream);
+    //printf("cmd--%s--\n",cmd);
+    //printf("buf--%s--\n",buf);
+    pclose(stream);
+    return 0;
+}
 
 void get_file(int fd,char *f,FILE* socket)
 {
@@ -437,9 +506,7 @@ void get_file(int fd,char *f,FILE* socket)
         fclose(arg_file);
         //  fclose(fp);
     }
-    // exit(0);
 }
-
 
 
 char *show_date() //good!
@@ -458,7 +525,7 @@ char *show_date() //good!
 }
 
 // multithreading part
-// By Divya
+// By Si Chen and Divya
 
 
 //this method will intialize the thread pool
@@ -568,11 +635,11 @@ int thpool_jobqueue_addone_to_tail(thpool_t* thread_p, thpool_job_t* newjob)
     // init
     newjob -> next = NULL;
     newjob -> prev = NULL;
-    
+
     thpool_job_t* oldOne;
-    
+
     oldOne = thread_p -> jobqueue -> tail;
-    
+
     if(thread_p -> jobqueue -> jobN == 0) // if it is an empty list
     {
         thread_p -> jobqueue -> head = newjob;
@@ -583,12 +650,12 @@ int thpool_jobqueue_addone_to_tail(thpool_t* thread_p, thpool_job_t* newjob)
         newjob -> prev = oldOne;
         oldOne -> next = newjob;
         thread_p -> jobqueue -> tail = newjob;
-        
+
     }
-   // thread_p -> jobqueue -> jobN = thread_p -> jobqueue -> jobN + 1;
-    
+    // thread_p -> jobqueue -> jobN = thread_p -> jobqueue -> jobN + 1;
+
     return 0;
-    
+
 }
 
 //int thpool_pool_addone(thpool_t* thread_p, void*)
@@ -602,7 +669,7 @@ void *thread_listen(){
         thpool_job_t* newjob;
         newjob = (thpool_job_t*) malloc(sizeof(thpool_job_t));
         if(newjob == NULL)
-       
+
         {
             fprintf(stderr,"In listen, cannot allocate memory for new job\n");
         }
@@ -624,24 +691,14 @@ void *thread_listen(){
         sscanf(request, "%s %s",cmd, arg_f +2);
         sscanf(request,"%s",cmd);
         sscanf(request,"%*[^/]/%[^ ]",arg_f);
-        if(strcmp(cmd,"GET") ==0){ // if it is a Get request
-        struct stat info;
-        if(stat(arg_f,&info) != -1){
-                size= info.st_size;
-            }
-            else{
-                size = 0;
-            }
-        if(size >= 72340172838076672){
-            size = 0;
-        }
-        }
-        else if(strcmp(cmd,"HEAD") == 0)
+        //request_arg_judge(arg_f);
+        size = get_file_size(arg_f);
+        if(strcmp(cmd,"HEAD") == 0)
         {
             size = 0;
         }
 #ifdef DEBUG
-        fprintf(stderr,"%s %s %ld\n",cmd,arg_f,size);
+        fprintf(stderr,"Listen:CMD:%s ARG_F:%s SIZE:%ld\n",cmd,arg_f,size);
 #endif
 
         newjob->filesize = size;
@@ -674,17 +731,17 @@ void do_sjf(thpool_t* thread_p)
         firstjob = thread_p->jobqueue->tail;
         secjob = thread_p->jobqueue->tail->prev;
         for(int k = jobNum-1; k > 0 ; k--){
-   if(firstjob->filesize > secjob->filesize)
-   {
-       targetjob = secjob;
-       firstjob = secjob;
-       secjob = secjob->prev;
-   }
-   else{
-       firstjob = secjob;
-       secjob = secjob->prev;
-       
-   }
+            if(firstjob->filesize > secjob->filesize)
+            {
+                targetjob = secjob;
+                firstjob = secjob;
+                secjob = secjob->prev;
+            }
+            else{
+                firstjob = secjob;
+                secjob = secjob->prev;
+
+            }
         }
         if(targetjob != thread_p->jobqueue->tail && targetjob != thread_p->jobqueue->head)
         {
@@ -709,7 +766,7 @@ void *thread_schedule(){
             pthread_cond_wait(&clientId_sche,&clientId_mutex);
         }
         if(SCHED==1){  //FCFS
-        pthread_cond_signal(&clientId_req_cond);
+            pthread_cond_signal(&clientId_req_cond);
         }
         else if(SCHED ==0){ //SJF
             do_sjf(threadpool);
@@ -723,7 +780,7 @@ void *thread_schedule(){
 
 void thread_exec(thpool_t* thread_p){
     while (true) {
-         char* request=NULL;
+        char* request=NULL;
         int socketid;
         thpool_job_t* job;
 
@@ -740,7 +797,7 @@ void thread_exec(thpool_t* thread_p){
         process_request(request, socketid);
         request_queuing_time=get_time(); //call this function from queuing thread
         request_scheduling_time=get_time();//call this function from scheduling thread
-        if(LOGGING){
+        if(LOGGING == 1 || DEBUG_MODE == 1){
 #ifdef DEBUG
             fprintf(stderr," I am going into logging\n");
 #endif
@@ -749,12 +806,12 @@ void thread_exec(thpool_t* thread_p){
         }
         free(job->request);
         close(socketid);
-       // fclose(fpin);
+        // fclose(fpin);
 #ifdef DEBUG
         printf("got one! request = %s",request);
 #endif
         pthread_cond_broadcast(&clientId_req_cond);
         pthread_mutex_unlock(&client_enter_cond);
-}
+    }
 
 }

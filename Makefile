@@ -5,8 +5,8 @@
 CC = gcc
 CFLAGS = -O -Wall -lpthread -std=c99 -pedantic -D_XOPEN_SOURCE=600 -pthread
 DEBUG = -DDEBUG
-myhttpd: main.o logging.o scheduling.o
-	$(CC) $(CFLAGS) -o myhttpd main.o logging.o scheduling.o
+myhttpd: main.o logging.o
+	$(CC) $(CFLAGS) -o myhttpd main.o logging.o
 
 main.o:  main.c
 	$(CC) $(CFLAGS) -c main.c 
@@ -14,12 +14,9 @@ main.o:  main.c
 logging.o: logging.c
 	$(CC) $(CFLAGS) -c logging.c
 
-scheduling.o: scheduling.c
-	$(CC) $(CFLAGS) -c scheduling.c
-
 # For the debug mode
 debug: 
-	$(CC) $(CFLAGS) $(DEBUG) -o myhttpd main.c logging.c scheduling.c
+	$(CC) $(CFLAGS) $(DEBUG) -o myhttpd main.c logging.c
 
 clean:
 	@- $(RM) *.o

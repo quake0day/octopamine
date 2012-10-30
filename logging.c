@@ -33,7 +33,7 @@ void logging(char *log_file, char *ip_addr, char *request_queuing_time, char *re
     sscanf(req,"%*[^/]/%[^ ]",arg_f);
     // FILE *arg_file = fopen(arg_f,"r");
     struct stat info;
-   // stat(arg_f,&info);
+    // stat(arg_f,&info);
     //   int filesize;
 
     //   char *a=NULL;
@@ -52,7 +52,7 @@ void logging(char *log_file, char *ip_addr, char *request_queuing_time, char *re
     else{
         size = 0;
     }
-    
+
     if (strcmp(cmd,"GET")==0)
     {
         status=200;
